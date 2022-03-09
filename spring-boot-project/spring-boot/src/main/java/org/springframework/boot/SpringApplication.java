@@ -256,11 +256,17 @@ public class SpringApplication {
 		this.resourceLoader = resourceLoader;
 		Assert.notNull(primarySources, "PrimarySources must not be null");
 		this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+		// 推断应用的类型
 		this.webApplicationType = WebApplicationType.deduceFromClasspath();
 		this.bootstrapRegistryInitializers = new ArrayList<>(
 				getSpringFactoriesInstances(BootstrapRegistryInitializer.class));
+		// 使用SpringFactoriesLoader查找并加载classpath下META-INF/spring.factories
+		// 加载所有可以加载的ApplicationContextInitializer
 		setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+		// 使用SpringFactoriesLoader查找并加载classpath下MEAT-INF/spring.factories文件中
+		// 所有可用的ApplicationListener
 		setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+		// 推断并设置main方法的定义类
 		this.mainApplicationClass = deduceMainApplicationClass();
 	}
 
@@ -268,7 +274,9 @@ public class SpringApplication {
 		try {
 			StackTraceElement[] stackTrace = new RuntimeException().getStackTrace();
 			for (StackTraceElement stackTraceElement : stackTrace) {
+				// 这里遍历寻找main方法
 				if ("main".equals(stackTraceElement.getMethodName())) {
+					// 推断并设置main方法的定义类
 					return Class.forName(stackTraceElement.getClassName());
 				}
 			}
@@ -432,25 +440,52 @@ public class SpringApplication {
 		return getSpringFactoriesInstances(type, new Class<?>[] {});
 	}
 
+	/**
+	 * 获取并加载Factories中的类
+	 * @param type 需要被加载的类型
+	 * @param parameterTypes Class类数组
+	 * @param args 参数
+	 * @param <T>
+	 * @return
+	 */
 	private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
+		// 获取类加载器
 		ClassLoader classLoader = getClassLoader();
 		// Use names and ensure unique to protect against duplicates
+		// loadFactoryNames使用给定的类加载器，加载META-INF/spring.factories下的类名
+		// 如果没有则返回空数组
 		Set<String> names = new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
 		List<T> instances = createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
+		// 根据AnnotationAwareOrderComparator对类进行排序
 		AnnotationAwareOrderComparator.sort(instances);
 		return instances;
 	}
 
+	/**
+	 * 初始化需要加载的类
+	 * @param type 加载的类型
+	 * @param parameterTypes 参数数组
+	 * @param classLoader 类加载器
+	 * @param args
+	 * @param names 需要加载类名的集合
+	 * @param <T>
+	 * @return
+	 */
 	@SuppressWarnings("unchecked")
 	private <T> List<T> createSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes,
 			ClassLoader classLoader, Object[] args, Set<String> names) {
 		List<T> instances = new ArrayList<>(names.size());
 		for (String name : names) {
 			try {
+				// 加载类
 				Class<?> instanceClass = ClassUtils.forName(name, classLoader);
+				// 判断是否是type的子类
 				Assert.isAssignable(type, instanceClass);
+				// 获取该类的构造函数
 				Constructor<?> constructor = instanceClass.getDeclaredConstructor(parameterTypes);
+				// 使用构造函数创建类
 				T instance = (T) BeanUtils.instantiateClass(constructor, args);
+				// 添加到初始化容器中
 				instances.add(instance);
 			}
 			catch (Throwable ex) {
